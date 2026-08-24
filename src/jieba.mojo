@@ -1,15 +1,10 @@
 """Dictionary trie and dynamic-programming route selection for jieba."""
 
-from std.algorithm import parallelize
-from std.sys.info import num_physical_cores, simd_width_of as simdwidthof
+from std.sys.info import simd_width_of as simdwidthof
 
 comptime IPtr = UnsafePointer[Int, AnyOrigin[mut=True]]
 comptime U32Ptr = UnsafePointer[UInt32, AnyOrigin[mut=True]]
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
-comptime PARALLEL_THRESHOLD = 32_768
-comptime MAX_WORKERS = 8
-
-
 def find_child(
     node: Int,
     codepoint: UInt32,
@@ -173,45 +168,18 @@ def mjb_route_batch(
     var root_children = IPtr(unsafe_from_address=root_children_addr)
     var route = IPtr(unsafe_from_address=route_addr)
     var scores = FPtr(unsafe_from_address=scores_addr)
-    var workers = min(
-        min(segment_count, num_physical_cores()), MAX_WORKERS
-    )
-
-    @parameter
-    def process_worker(worker: Int):
-        var first = segment_count * worker // workers
-        var last = segment_count * (worker + 1) // workers
-        for segment in range(first, last):
-            route_range(
-                chars,
-                Int(starts[segment]),
-                Int(ends[segment]),
-                edge_chars,
-                edge_offsets,
-                edge_children,
-                node_weights,
-                root_children,
-                max_word_length,
-                unknown_weight,
-                route,
-                scores,
-            )
-
-    if n >= PARALLEL_THRESHOLD and workers > 1:
-        parallelize[process_worker](workers, workers)
-    else:
-        for segment in range(segment_count):
-            route_range(
-                chars,
-                Int(starts[segment]),
-                Int(ends[segment]),
-                edge_chars,
-                edge_offsets,
-                edge_children,
-                node_weights,
-                root_children,
-                max_word_length,
-                unknown_weight,
-                route,
-                scores,
-            )
+    for segment in range(segment_count):
+        route_range(
+            chars,
+            Int(starts[segment]),
+            Int(ends[segment]),
+            edge_chars,
+            edge_offsets,
+            edge_children,
+            node_weights,
+            root_children,
+            max_word_length,
+            unknown_weight,
+            route,
+            scores,
+        )
