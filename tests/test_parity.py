@@ -233,17 +233,15 @@ def test_hash_table_handles_random_dictionary_routes(tmp_path):
 def test_simd_child_scan_tail_parity(tmp_path):
     dictionary = tmp_path / "wide.txt"
     dictionary.write_text(
-        "甲丁 100 n\n"
-        "甲丙 100 n\n"
-        "甲乙 100 n\n"
-        "甲己 100 n\n"
-        "甲庚 100000 n\n"
-        "甲戊 100 n\n",
+        "".join(
+            f"甲{character} {100000 if character == '卯' else 100} n\n"
+            for character in "乙丙丁戊己庚辛壬癸子丑寅卯辰"
+        ),
         encoding="utf-8",
     )
     ours = mojo.Tokenizer(dictionary)
     theirs = upstream.Tokenizer(dictionary)
-    sentence = "甲庚甲戊甲辛"
+    sentence = "甲卯甲辰甲午"
     assert ours.lcut(sentence, HMM=False) == theirs.lcut(sentence, HMM=False)
 
 
@@ -308,3 +306,25 @@ def test_batched_route_serial_and_parallel_parity(repeats):
     assert mojo.lcut(sentence, HMM=False) == upstream.lcut(
         sentence, HMM=False
     )
+
+
+def test_batched_route_parallel_threshold(monkeypatch):
+    import mojo_jieba.core as core
+
+    calls = []
+    native = core.native_route_batch
+
+    def recording_route_batch(*args):
+        calls.append(len(args[1]))
+        native(*args)
+
+    monkeypatch.setattr(core, "native_route_batch", recording_route_batch)
+    unit = "南京市长江大桥欢迎您。小明毕业于中国科学院。"
+
+    mojo.lcut(unit, HMM=False)
+    assert len(calls) == 1
+
+    calls.clear()
+    sentence = unit * ((core._PARALLEL_THRESHOLD // len(unit)) + 1)
+    assert mojo.lcut(sentence, HMM=False) == upstream.lcut(sentence, HMM=False)
+    assert len(calls) > 1

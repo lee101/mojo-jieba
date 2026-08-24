@@ -162,24 +162,20 @@ def route_batch(
         raise ValueError("starts and ends must have the same length")
     if len(output) != len(chars) or len(scores) != len(chars) + 1:
         raise ValueError("route outputs do not match the character count")
-    previous_end: int | None = None
-    for start, end in zip(starts.tolist(), ends.tolist()):
-        if (
-            start < 0
-            or (previous_end is not None and start <= previous_end)
-            or end <= start
-            or end > len(chars)
-        ):
-            raise ValueError(
-                "route spans must be ordered, separated, and non-empty"
-            )
-        previous_end = end
+    invalid = (
+        np.any(starts < 0)
+        or np.any(ends <= starts)
+        or np.any(ends > len(chars))
+        or (len(starts) > 1 and np.any(starts[1:] <= ends[:-1]))
+    )
+    if invalid:
+        raise ValueError("route spans must be ordered, separated, and non-empty")
     if not len(starts):
         scores[0] = 0.0
         return
     lib().mjb_route_batch(
         _array_address(chars, name="chars", dtype=np.dtype(np.uint32)),
-        sum(int(end - start) for start, end in zip(starts, ends)),
+        len(chars),
         starts_addr,
         ends_addr,
         len(starts),

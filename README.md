@@ -73,17 +73,20 @@ runs; speedup is upstream jieba time divided by mojo-jieba time.
 
 | case | mojo-jieba | jieba 0.42.1 | speedup |
 |---|---:|---:|---:|
-| accurate, HMM=False (196,000 chars) | 115.93 ms | 431.90 ms | 3.73x |
-| accurate, HMM=True (196,000 chars) | 282.93 ms | 596.46 ms | 2.11x |
-| search, HMM=False (196,000 chars) | 156.49 ms | 902.99 ms | 5.77x |
-| tokenize search (196,000 chars) | 228.88 ms | 539.28 ms | 2.36x |
+| accurate, HMM=False (196,000 chars) | 102.67 ms | 423.98 ms | 4.13x |
+| accurate, HMM=True (196,000 chars) | 214.08 ms | 590.13 ms | 2.76x |
+| search, HMM=False (196,000 chars) | 148.66 ms | 481.93 ms | 3.24x |
+| tokenize search (196,000 chars) | 193.11 ms | 541.15 ms | 2.80x |
 
 These results include Python regex splitting and result construction on both
 sides. The native route kernel is called once per input instead of once per
 regex block. Sufficiently large inputs route independent blocks across a
 bounded CPU worker pool; smaller inputs stay serial.
 
-No GPU path is provided; this release targets the CPU.
+No GPU path is provided. Trie traversal is branch-heavy and performs roughly
+one floating-point add and comparison per several irregular array loads, well
+below two floating-point operations per byte moved. Host/device transfer and
+launch overhead would dominate this low-arithmetic-intensity kernel.
 
 ## How it works
 

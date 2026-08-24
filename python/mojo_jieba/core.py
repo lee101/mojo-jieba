@@ -9,6 +9,7 @@ import os
 import re
 import threading
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import numpy as np
@@ -26,6 +27,13 @@ _RE_HAN_DEFAULT = re.compile(r"([\u4E00-\u9FD5a-zA-Z0-9+#&._%\-]+)", re.U)
 _RE_SKIP_DEFAULT = re.compile(r"(\r\n|\s)", re.U)
 
 logger = logging.getLogger("mojo_jieba")
+
+_PARALLEL_THRESHOLD = 32_768
+_PARALLEL_WORKERS = min(8, os.cpu_count() or 1)
+_ROUTE_EXECUTOR = ThreadPoolExecutor(
+    max_workers=_PARALLEL_WORKERS,
+    thread_name_prefix="mojo-jieba-route",
+)
 
 
 def _decode(value) -> str:
@@ -198,10 +206,8 @@ class Tokenizer:
             return route, scores
         starts = np.fromiter((start for start, _ in spans), dtype=np.int64)
         ends = np.fromiter((end for _, end in spans), dtype=np.int64)
-        native_route_batch(
+        arguments = (
             chars,
-            starts,
-            ends,
             vocabulary.edge_chars,
             vocabulary.edge_offsets,
             vocabulary.edge_children,
@@ -212,6 +218,27 @@ class Tokenizer:
             route,
             scores,
         )
+        if (
+            len(chars) >= _PARALLEL_THRESHOLD
+            and len(starts) > 1
+            and _PARALLEL_WORKERS > 1
+        ):
+            worker_count = min(_PARALLEL_WORKERS, len(starts))
+            chunk_size = (len(starts) + worker_count - 1) // worker_count
+            futures = [
+                _ROUTE_EXECUTOR.submit(
+                    native_route_batch,
+                    arguments[0],
+                    starts[first : first + chunk_size],
+                    ends[first : first + chunk_size],
+                    *arguments[1:],
+                )
+                for first in range(0, len(starts), chunk_size)
+            ]
+            for future in futures:
+                future.result()
+        else:
+            native_route_batch(chars, starts, ends, *arguments[1:])
         return route, scores
 
     def get_DAG(self, sentence):

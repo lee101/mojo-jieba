@@ -18,7 +18,7 @@ def find_child(
             return Int(root_children[Int(codepoint)])
     var lo = Int(edge_offsets[node])
     var hi = Int(edge_offsets[node + 1])
-    if hi - lo <= 8:
+    if hi - lo <= 16:
         comptime W = simdwidthof[DType.float64]()
         if hi - lo < W:
             for index in range(lo, hi):
